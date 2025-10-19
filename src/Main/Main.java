@@ -39,44 +39,87 @@ public class Main {
                 System.out.println("Invalid selection");
         }
     }
-
     private static void signUp(Scanner sc) {
-        System.out.println("=== Sign Up ===");
-        System.out.print("Enter First Name: ");
-        String firstName = sc.nextLine();
-        System.out.print("Enter Last Name: ");
-        String lastName = sc.nextLine();
-        System.out.print("Enter Age: ");
-        int age = sc.nextInt();
-        sc.nextLine();
-        System.out.print("Enter Contact No: ");
-        String contactNo = sc.nextLine();
+    System.out.println("=== Sign Up ===");
+
+    System.out.print("Enter First Name: ");
+    String firstName = sc.nextLine();
+
+    System.out.print("Enter Last Name: ");
+    String lastName = sc.nextLine();
+
+    System.out.print("Enter Age: ");
+    int age = sc.nextInt();
+    sc.nextLine(); // consume leftover newline
+
+    System.out.print("Enter Contact No: ");
+    String contactNo = sc.nextLine();
+
+    // --- EMAIL VALIDATION SECTION ---
+    String email;
+    while (true) {
         System.out.print("Enter Gmail: ");
-        String email = sc.nextLine();
+        email = sc.nextLine();
 
         String checkEmailSQL = "SELECT * FROM Employee WHERE Mail = ?";
-        java.util.List<java.util.Map<String, Object>> result = db.fetchRecords(checkEmailSQL, email);
+        java.util.List<java.util.Map<String, Object>> emailResult = db.fetchRecords(checkEmailSQL, email);
 
-        while (!result.isEmpty()) {
-            System.out.print("Email already exists, please try another email: ");
-            email = sc.nextLine();
-            result = db.fetchRecords(checkEmailSQL, email);
+        if (emailResult.isEmpty()) {
+            break; // email is unique
+        } else {
+            System.out.println("❌ Email already exists! Please try another Gmail.");
         }
-
-        System.out.print("Enter Address: ");
-        String address = sc.nextLine();
-        System.out.print("Enter Username: ");
-        String username = sc.nextLine();
-        System.out.print("Enter Password: ");
-        String password = sc.nextLine();
-
-        String insertSQL = "INSERT INTO Employee (F_name, L_name, Age, Num, Mail, Address, User, Password, Appr, Stat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        db.addRecord(insertSQL, firstName, lastName, age, contactNo, email, address, username, password, "Pending", "Active");
-
-        System.out.println("User registered successfully!");
-        System.out.println("Username: " + username + ", Email: " + email);
     }
 
+    System.out.print("Enter Address: ");
+    String address = sc.nextLine();
+
+    // --- USERNAME VALIDATION SECTION ---
+    String username;
+    while (true) {
+        System.out.print("Enter Username: ");
+        username = sc.nextLine();
+
+        String checkUserSQL = "SELECT * FROM Employee WHERE User = ?";
+        java.util.List<java.util.Map<String, Object>> userResult = db.fetchRecords(checkUserSQL, username);
+
+        if (userResult.isEmpty()) {
+            break; // username is unique
+        } else {
+            System.out.println("❌ Username already exists! Please try another username.");
+        }
+    }
+
+    System.out.print("Enter Password: ");
+    String password = sc.nextLine();
+
+    // --- INSERT NEW RECORD ---
+    String insertSQL = "INSERT INTO Employee (F_name, L_name, Age, Num, Mail, Address, User, Password, Appr, Stat) " +
+                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    db.addRecord(insertSQL, firstName, lastName, age, contactNo, email, address, username, password, "Pending", "Active");
+
+    // --- CONFIRMATION OUTPUT ---
+    System.out.println("\n✅ User registered successfully!");
+    System.out.println("Username: " + username);
+    System.out.println("Email: " + email);
+
+    // --- OPTIONAL LOGIN VERIFICATION ---
+    System.out.println("\nAttempting to verify registration...");
+
+    String sql = "SELECT * FROM Employee WHERE Mail = ? AND Password = ?";
+    java.util.List<java.util.Map<String, Object>> loginResult = db.fetchRecords(sql, email, password);
+
+    if (!loginResult.isEmpty()) {
+        java.util.Map<String, Object> user = loginResult.get(0);
+        System.out.println("Login successful!");
+        System.out.println("Status: " + user.get("Stat"));
+        System.out.println("Approval: " + user.get("Appr"));
+    } else {
+        System.out.println("Verification failed. Please check your credentials.");
+    }
+}
+
+    
     private static void addTask(Scanner sc) {
         System.out.print("Enter task ID: ");
         int taskId = sc.nextInt();
@@ -89,95 +132,171 @@ public class Main {
     }
 
     private static void login(Scanner sc) {
-        System.out.println("=== Login ===");
-        System.out.print("Enter Username: ");
-        String loginUsername = sc.nextLine();
-        System.out.print("Enter Password: ");
-        String loginPassword = sc.nextLine();
+    System.out.println("=== Login ===");
+    System.out.print("Enter Username: ");
+    String loginUsername = sc.nextLine();
+    System.out.print("Enter Password: ");
+    String loginPassword = sc.nextLine();
 
-        if (loginUsername.equals(adminUsername) && loginPassword.equals(adminPassword)) {
-            System.out.println("Admin login successful. Welcome, " + adminUsername + "!");
-            System.out.println("1. View employees");
-            System.out.println("2. Delete employee account");
-            System.out.println("3. Task management");
-            System.out.println("4. Assign task");
-            System.out.println("5. View assignment");
-            System.out.println("6. Change your credentials");
-            System.out.println("7. Return to main menu");
+    // ===== SUPER ADMIN LOGIN =====
+    if (loginUsername.equals("123") && loginPassword.equals("123")) {
+        System.out.println("Super Admin login successful. Welcome, System Developer!");
+        System.out.println("-------------------------------------------");
+
+        // Check if there's already an admin in the database
+        String checkAdminSQL = "SELECT * FROM Employee WHERE Appr = 'Approved'";
+        java.util.List<java.util.Map<String, Object>> adminList = db.fetchRecords(checkAdminSQL);
+
+        if (adminList.isEmpty()) {
+            System.out.println("⚠ No admin accounts found.");
+            System.out.print("Would you like to create the first admin? (Y/N): ");
+            String response = sc.nextLine();
+
+            if (response.equalsIgnoreCase("Y")) {
+                System.out.print("Enter new Admin's First Name: ");
+                String fname = sc.nextLine();
+                System.out.print("Enter new Admin's Last Name: ");
+                String lname = sc.nextLine();
+                System.out.print("Enter Admin Username: ");
+                String aUser = sc.nextLine();
+                System.out.print("Enter Admin Password: ");
+                String aPass = sc.nextLine();
+                System.out.print("Enter Admin Email: ");
+                String aMail = sc.nextLine();
+
+                String insertAdminSQL = "INSERT INTO Employee (F_name, L_name, Age, Num, Mail, Address, User, Password, Appr, Stat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                db.addRecord(insertAdminSQL, fname, lname, 0, "", aMail, "System", aUser, aPass, "Approved", "Active");
+
+                System.out.println("✅ First Admin account created successfully!");
+            } else {
+                System.out.println("Skipping admin creation...");
+            }
+        } else {
+            System.out.println("Admin accounts already exist in the system.");
+        }
+
+        // Super Admin menu
+        while (true) {
+            System.out.println("\n=== Super Admin Menu ===");
+            System.out.println("1. N/A");
+            System.out.println("2. N/A");
+            System.out.println("3. Logout");
             System.out.print("Response: ");
-            int adminOption = sc.nextInt();
+            int option = sc.nextInt();
             sc.nextLine();
 
-            switch (adminOption) {
+            switch (option) {
                 case 1:
-                    viewEmployee();
+                    
                     break;
                 case 2:
-                    deleteEmployeeInfo(sc);
+                    
+                    break;
+                
+                case 3:
+                    System.out.println("Logging out Super Admin...");
+                    return;
+                default:
+                    System.out.println("Invalid selection.");
+            }
+        }
+    }
+
+    // ===== NORMAL ADMIN LOGIN =====
+    if (loginUsername.equals(adminUsername) && loginPassword.equals(adminPassword)) {
+        System.out.println("Admin login successful. Welcome, " + adminUsername + "!");
+        System.out.println("-------------------------------------------");
+        System.out.println("1. View employees");
+        System.out.println("2. Approve accounts");
+        System.out.println("3. Archive employee account");
+        System.out.println("4. Task management");
+        System.out.println("5. Assign task");
+        System.out.println("6. View assignment");
+        System.out.println("7. Change your credentials");
+        System.out.println("8. Add another Admin");
+        System.out.println("9. Return to main menu");
+        System.out.print("Response: ");
+        int adminOption = sc.nextInt();
+        sc.nextLine();
+
+        switch (adminOption) {
+            case 1:
+                viewEmployee();
+                break;
+            case 2:
+                
+                break;
+            case 3:
+                
+                break;
+            case 4:
+                taskManagement(sc);
+                break;
+            case 5:
+                assignTask(sc);
+                break;
+            case 6:
+                viewAssignment();
+                break;
+            case 7:
+                changeAdminCredentials(sc);
+                break;
+            case 8:
+                
+                break;
+            case 9:
+                System.out.println("Returning to Main Menu...");
+                break;
+            default:
+                System.out.println("Invalid selection");
+        }
+        return;
+    }
+
+    // ===== EMPLOYEE LOGIN =====
+    try (Connection conn = db.connectDB()) {
+        String sql = "SELECT * FROM Employee WHERE User = ? AND Password = ?";
+        PreparedStatement pstmt = conn.prepareStatement(sql);
+        pstmt.setString(1, loginUsername);
+        pstmt.setString(2, loginPassword);
+        ResultSet rs = pstmt.executeQuery();
+
+        if (rs.next()) {
+            System.out.println("Login successful. Welcome, " + rs.getString("F_name") + "!");
+            System.out.println("1. View your tasks");
+            System.out.println("2. Update your task status");
+            System.out.println("3. Logout");
+            System.out.print("Response: ");
+            int userOption = sc.nextInt();
+            sc.nextLine();
+
+            switch (userOption) {
+                case 1:
+                    viewYourTask(loginUsername);
+                    break;
+                case 2:
+                    // Implement updateTaskStatus() here later
                     break;
                 case 3:
-                    taskManagement(sc);
-                    break;
-                case 4:
-                    assignTask(sc);
-                    break;
-                case 5:
-                    viewAssignment();
-                    break;
-                case 6:
-                    changeAdminCredentials(sc);
-                    break;
-                case 7:
-                    System.out.println("Returning to Main Menu...");
+                    System.out.println("Logging out...");
                     break;
                 default:
                     System.out.println("Invalid selection");
             }
-            return;
+        } else {
+            System.out.println("Invalid username or password.");
         }
-
-        try (Connection conn = db.connectDB()) {
-            String sql = "SELECT * FROM Employee WHERE User = ? AND Password = ?";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, loginUsername);
-            pstmt.setString(2, loginPassword);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                System.out.println("Login successful. Welcome, " + rs.getString("F_name") + "!");
-                System.out.println("1. View your tasks");
-                System.out.println("2. Update your task status");
-                System.out.println("3. Logout");
-                System.out.print("Response: ");
-                int userOption = sc.nextInt();
-                sc.nextLine();
-
-                switch (userOption) {
-                    case 1:
-                        viewYourTask(loginUsername);
-                        break;
-                    case 2:
-                        // you can implement updateTaskStatus() here later
-                        break;
-                    case 3:
-                        System.out.println("Logging out...");
-                        break;
-                    default:
-                        System.out.println("Invalid selection");
-                }
-            } else {
-                System.out.println("Invalid username or password.");
-            }
-        } catch (Exception e) {
-            System.out.println("Error during login: " + e.getMessage());
-        }
+    } catch (Exception e) {
+        System.out.println("Error during login: " + e.getMessage());
     }
+}
+
 
     private static void taskManagement(Scanner sc) {
         System.out.println("1. Add Task");
         System.out.println("2. View Tasks");
         System.out.println("3. Delete Task");
-        System.out.println("4. Update Task Status");
+        System.out.println("4. Update Task");
         System.out.print("Choice: ");
         int choice = sc.nextInt();
         sc.nextLine();
@@ -305,24 +424,5 @@ public class Main {
         System.out.println("Admin credentials updated successfully!");
     }
 
-    private static void deleteEmployeeInfo(Scanner sc) {
-        System.out.println("=== Delete Employee Account ===");
-        String empQuery = "SELECT U_ID, F_name, L_name FROM Employee";
-        String[] empHeaders = {"Employee ID", "First Name", "Last Name"};
-        String[] empColumns = {"U_ID", "F_name", "L_name"};
-        db.viewRecords(empQuery, empHeaders, empColumns);
-        System.out.print("Enter the Employee ID you want to delete: ");
-        int employeeIdToDelete = sc.nextInt();
-        sc.nextLine();
-        System.out.print("Are you sure you want to delete this employee? (yes/no): ");
-        String confirm = sc.nextLine();
-
-        if (confirm.equalsIgnoreCase("yes")) {
-            String sqlDelete = "DELETE FROM Employee WHERE U_ID = ?";
-            db.deleteRecord(sqlDelete, employeeIdToDelete);
-            System.out.println("Employee deleted successfully!");
-        } else {
-            System.out.println("Deletion cancelled.");
-        }
-    }
+    
 }
