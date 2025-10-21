@@ -2,8 +2,11 @@ package Main;
 
 import Config.Config;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Scanner;
 
 public class Main {
@@ -118,8 +121,18 @@ public class Main {
         System.out.println("Verification failed. Please check your credentials.");
     }
 }
+    private static void addAdmin(Scanner sc) {
+    System.out.print("Add Username: ");
+    String user = sc.nextLine();  // use nextLine() to read full line
+    System.out.print("Add Password: ");
+    String pass = sc.nextLine();
 
-    
+    String sql = "INSERT INTO Admins (A_user, A_pass) VALUES (?, ?)";
+    db.addRecord(sql, user, pass);
+
+    System.out.println("Admin added successfully!");
+}
+  
     private static void addTask(Scanner sc) {
         System.out.print("Enter task ID: ");
         int taskId = sc.nextInt();
@@ -143,43 +156,11 @@ public class Main {
         System.out.println("Super Admin login successful. Welcome, System Developer!");
         System.out.println("-------------------------------------------");
 
-        // Check if there's already an admin in the database
-        String checkAdminSQL = "SELECT * FROM Employee WHERE Appr = 'Approved'";
-        java.util.List<java.util.Map<String, Object>> adminList = db.fetchRecords(checkAdminSQL);
-
-        if (adminList.isEmpty()) {
-            System.out.println("⚠ No admin accounts found.");
-            System.out.print("Would you like to create the first admin? (Y/N): ");
-            String response = sc.nextLine();
-
-            if (response.equalsIgnoreCase("Y")) {
-                System.out.print("Enter new Admin's First Name: ");
-                String fname = sc.nextLine();
-                System.out.print("Enter new Admin's Last Name: ");
-                String lname = sc.nextLine();
-                System.out.print("Enter Admin Username: ");
-                String aUser = sc.nextLine();
-                System.out.print("Enter Admin Password: ");
-                String aPass = sc.nextLine();
-                System.out.print("Enter Admin Email: ");
-                String aMail = sc.nextLine();
-
-                String insertAdminSQL = "INSERT INTO Employee (F_name, L_name, Age, Num, Mail, Address, User, Password, Appr, Stat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                db.addRecord(insertAdminSQL, fname, lname, 0, "", aMail, "System", aUser, aPass, "Approved", "Active");
-
-                System.out.println("✅ First Admin account created successfully!");
-            } else {
-                System.out.println("Skipping admin creation...");
-            }
-        } else {
-            System.out.println("Admin accounts already exist in the system.");
-        }
-
         // Super Admin menu
         while (true) {
             System.out.println("\n=== Super Admin Menu ===");
-            System.out.println("1. N/A");
-            System.out.println("2. N/A");
+            System.out.println("1. Add Admin User");
+            System.out.println("2. View Admin Accounts");
             System.out.println("3. Logout");
             System.out.print("Response: ");
             int option = sc.nextInt();
@@ -187,12 +168,11 @@ public class Main {
 
             switch (option) {
                 case 1:
-                    
+                    addAdmin(sc);
                     break;
                 case 2:
-                    
+                    viewAdminAcc();
                     break;
-                
                 case 3:
                     System.out.println("Logging out Super Admin...");
                     return;
@@ -203,8 +183,11 @@ public class Main {
     }
 
     // ===== NORMAL ADMIN LOGIN =====
-    if (loginUsername.equals(adminUsername) && loginPassword.equals(adminPassword)) {
-        System.out.println("Admin login successful. Welcome, " + adminUsername + "!");
+    String sqlAdminLogin = "SELECT * FROM Admins WHERE A_user = ? AND A_pass = ?";
+    java.util.List<java.util.Map<String, Object>> adminList = db.fetchRecords(sqlAdminLogin, loginUsername, loginPassword);
+
+    if (!adminList.isEmpty()) {
+        System.out.println("Admin login successful. Welcome, " + loginUsername + "!");
         System.out.println("-------------------------------------------");
         System.out.println("1. View employees");
         System.out.println("2. Approve accounts");
@@ -224,10 +207,10 @@ public class Main {
                 viewEmployee();
                 break;
             case 2:
-                
+                ApproveAccount(sc);
                 break;
             case 3:
-                
+                // implement archive account
                 break;
             case 4:
                 taskManagement(sc);
@@ -242,15 +225,15 @@ public class Main {
                 changeAdminCredentials(sc);
                 break;
             case 8:
-                
+                addAdmin(sc);
                 break;
             case 9:
                 System.out.println("Returning to Main Menu...");
-                break;
+                return;
             default:
                 System.out.println("Invalid selection");
         }
-        return;
+        return;  // exit after admin menu
     }
 
     // ===== EMPLOYEE LOGIN =====
@@ -290,7 +273,27 @@ public class Main {
         System.out.println("Error during login: " + e.getMessage());
     }
 }
+    private static void ApproveAccount(Scanner sc) {
+    // 1. Show all employees first (you can filter if you want only pending approval)
+    String empQuery = "SELECT * FROM Employee WHERE Appr != 'Approved'"; // show only non-approved
+    String[] empHeaders = {"ID", "First Name", "Last Name", "Approval"};
+    String[] empColumns = {"U_ID", "F_name", "L_name", "Appr"};
+    db.viewRecords(empQuery, empHeaders, empColumns);
 
+    // 2. Ask admin which ID to approve
+    System.out.print("Enter the Employee ID to approve: ");
+    int empId = sc.nextInt();
+    sc.nextLine(); // consume newline
+
+    // 3. Update approval status in database
+    String updateSQL = "UPDATE Employee SET Appr = 'Approved' WHERE U_ID = ?";
+    try {
+        db.updateRecord(updateSQL, empId);
+        System.out.println("Employee ID " + empId + " approved successfully!");
+    } catch (Exception e) {
+        System.out.println("Error updating approval status: " + e.getMessage());
+    }
+}
 
     private static void taskManagement(Scanner sc) {
         System.out.println("1. Add Task");
@@ -385,7 +388,12 @@ public class Main {
         System.out.println("Error viewing your tasks: " + e.getMessage());
     }
 }
-
+    private static void viewTasks() {
+        String taskQuery = "SELECT * FROM Task";
+        String[] taskHeaders = {"Task ID", "Task"};
+        String[] taskColumns = {"Task_ID", "Task"};
+        db.viewRecords(taskQuery, taskHeaders, taskColumns);
+    }
 
     private static void viewAssignment() {
         String assignmentQuery = "SELECT * FROM Assignment";
@@ -394,10 +402,10 @@ public class Main {
         db.viewRecords(assignmentQuery, assignmentHeaders, assignmentColumns);
     }
 
-    private static void viewTasks() {
-        String taskQuery = "SELECT * FROM Task";
-        String[] taskHeaders = {"Task ID", "Task"};
-        String[] taskColumns = {"Task_ID", "Task"};
+    private static void viewAdminAcc() {
+        String taskQuery = "SELECT * FROM Admins";
+        String[] taskHeaders = {"Admin ID", "Username", "Password"};
+        String[] taskColumns = {"Admin_ID", "A_user", "A_pass"};
         db.viewRecords(taskQuery, taskHeaders, taskColumns);
     }
 
@@ -410,11 +418,12 @@ public class Main {
     }
 
     private static void viewEmployee() {
-        String empQuery = "SELECT * FROM Employee";
-        String[] empHeaders = {"ID", "First Name", "Last Name", "Age", "Number", "Mail", "Address", "User", "Password", "Approval", "Status"};
-        String[] empColumns = {"U_ID", "F_name", "L_name", "Age", "Num", "Mail", "Address", "User", "Password", "Appr", "Stat"};
-        db.viewRecords(empQuery, empHeaders, empColumns);
-    }
+    String empQuery = "SELECT * FROM Employee WHERE Appr = 'Approved'";
+    String[] empHeaders = {"ID", "First Name", "Last Name", "Status"};
+    String[] empColumns = {"U_ID", "F_name", "L_name", "Stat"};
+    db.viewRecords(empQuery, empHeaders, empColumns);
+}
+
 
     private static void changeAdminCredentials(Scanner sc) {
         System.out.print("Enter new admin username: ");

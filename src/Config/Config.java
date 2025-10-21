@@ -63,7 +63,6 @@ public class Config {
             System.out.println("Error adding record: " + e.getMessage());
         }
     }
-
   
     public void viewRecords(String sqlQuery, String[] columnHeaders, String[] columnNames) {
        
@@ -186,13 +185,5 @@ public class Config {
     }
 
     return records;
-}
-
-
-
-
-    public void viewRecords(String query, String[] headers, String[] columns, String username) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
-
 }
