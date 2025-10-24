@@ -189,7 +189,7 @@ public class Main {
     if (!adminList.isEmpty()) {
         System.out.println("Admin login successful. Welcome, " + loginUsername + "!");
         System.out.println("-------------------------------------------");
-        System.out.println("1. View employees");
+        System.out.println("1. View Employees");
         System.out.println("2. Approve accounts");
         System.out.println("3. Archive employee account");
         System.out.println("4. Task management");
@@ -197,7 +197,7 @@ public class Main {
         System.out.println("6. View assignment");
         System.out.println("7. Change your credentials");
         System.out.println("8. Add another Admin");
-        System.out.println("9. Return to main menu");
+        System.out.println("9. Logout");
         System.out.print("Response: ");
         int adminOption = sc.nextInt();
         sc.nextLine();
@@ -248,7 +248,8 @@ public class Main {
             System.out.println("Login successful. Welcome, " + rs.getString("F_name") + "!");
             System.out.println("1. View your tasks");
             System.out.println("2. Update your task status");
-            System.out.println("3. Logout");
+            System.out.println("3. Change your Credentials");
+            System.out.println("4. Logout");
             System.out.print("Response: ");
             int userOption = sc.nextInt();
             sc.nextLine();
@@ -261,6 +262,9 @@ public class Main {
                     // Implement updateTaskStatus() here later
                     break;
                 case 3:
+                    
+                    break;
+                case 4:
                     System.out.println("Logging out...");
                     break;
                 default:
