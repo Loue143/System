@@ -16,17 +16,28 @@ public class Main {
     private static Config db = new Config();
 
     public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        db.connectDB();
+    Scanner sc = new Scanner(System.in);
+    db.connectDB();
 
-        System.out.println("Welcome to Task Recording System");
+    boolean running = true; 
+
+    while (running) {
+        System.out.println("\n=== Welcome to Task Recording System ===");
         System.out.println("Select option");
         System.out.println("1. Sign up");
         System.out.println("2. Login");
         System.out.println("3. Exit");
         System.out.print("Response: ");
-        int option = sc.nextInt();
-        sc.nextLine();
+        
+        int option = -1;
+        try {
+            option = sc.nextInt();
+        } catch (Exception e) {
+            System.out.println("Invalid input. Please enter a number.");
+            sc.nextLine(); 
+            continue; 
+        }
+        sc.nextLine(); 
 
         switch (option) {
             case 1:
@@ -37,11 +48,23 @@ public class Main {
                 break;
             case 3:
                 System.out.println("System out!");
-                break;
+                running = false;
+                continue; 
             default:
                 System.out.println("Invalid selection");
         }
+
+        System.out.print("\nDo you want to return to the main menu? (Y/N): ");
+        String cont = sc.nextLine().trim().toLowerCase();
+
+        if (!cont.equals("y")) {
+            System.out.println("Exiting system... Goodbye!");
+            running = false;
+        }
     }
+
+    sc.close();
+}
     private static void signUp(Scanner sc) {
     while (true) { // <-- Loop for repeated sign-ups
         System.out.println("\n=== Sign Up ===");
