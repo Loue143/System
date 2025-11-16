@@ -19,9 +19,8 @@ public class Config {
         try {
             Class.forName("org.sqlite.JDBC");
             con = DriverManager.getConnection("jdbc:sqlite:Tasl_re.db"); 
-            
         } catch (Exception e) {
-            System.out.println("Connection Failed: " + e.getMessage());
+            System.out.println("Connection Failed: " + e);
         }
         return con;
     }
@@ -79,7 +78,7 @@ public class Config {
             StringBuilder headerLine = new StringBuilder();
             headerLine.append("--------------------------------------------------------------------------------\n| ");
             for (String header : columnHeaders) {
-                headerLine.append(String.format("%-20s | ", header));
+                headerLine.append(String.format("%-25s | ", header));
             }
             headerLine.append("\n--------------------------------------------------------------------------------");
 
@@ -90,7 +89,7 @@ public class Config {
                 StringBuilder row = new StringBuilder("| ");
                 for (String colName : columnNames) {
                     String value = rs.getString(colName);
-                    row.append(String.format("%-20s | ", value != null ? value : ""));
+                    row.append(String.format("%-25s | ", value != null ? value : ""));
                 }
                 System.out.println(row.toString());
             }
@@ -186,4 +185,28 @@ public class Config {
 
     return records;
     }
+    
+    public void executeUpdate(String update_Employee_SET_User_WHERE_User, String newUser, String username) {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+
+    public static String hashPassword(String password) {
+    try {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        byte[] hashedBytes = md.digest(password.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        
+        // Convert byte array to hex string
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hashedBytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    } catch (java.security.NoSuchAlgorithmException e) {
+        System.out.println("Error hashing password: " + e.getMessage());
+        return null;
+    }
+    }
+    
 }

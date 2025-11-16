@@ -1,670 +1,616 @@
 package Main;
 
 import Config.Config;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Scanner;
+import java.sql.*;
+import java.util.*;
 
 public class Main {
 
     private static String adminUsername = "123";
     private static String adminPassword = "123";
-    private static Config db = new Config();
+    private static Config db = new Config(); 
+
+    private static final Object DB_LOCK = new Object();
 
     public static void main(String[] args) {
-    Scanner sc = new Scanner(System.in);
-    db.connectDB();
+        Scanner sc = new Scanner(System.in);
+        boolean running = true;
 
-    boolean running = true; 
+        while (running) {
+            System.out.println("\n=== Welcome to Task Recording System ===");
+            System.out.println("Select option");
+            System.out.println("1. Sign up");
+            System.out.println("2. Login");
+            System.out.println("3. Exit");
+            System.out.print("Response: ");
 
-    while (running) {
-        System.out.println("\n=== Welcome to Task Recording System ===");
-        System.out.println("Select option");
-        System.out.println("1. Sign up");
-        System.out.println("2. Login");
-        System.out.println("3. Exit");
-        System.out.print("Response: ");
-        
-        int option = -1;
-        try {
-            option = sc.nextInt();
-        } catch (Exception e) {
-            System.out.println("Invalid input. Please enter a number.");
-            sc.nextLine(); 
-            continue; 
-        }
-        sc.nextLine(); 
+            int option = readInt(sc);
+            switch (option) {
+                case 1: signUp(sc); break;
+                case 2: login(sc); break;
+                case 3:
+                    System.out.println("Exiting system... Goodbye!");
+                    running = false;
+                    continue;
+                default: System.out.println("Invalid selection");
+            }
 
-        switch (option) {
-            case 1:
-                signUp(sc);
-                break;
-            case 2:
-                login(sc);
-                break;
-            case 3:
-                System.out.println("System out!");
-                running = false;
-                continue; 
-            default:
-                System.out.println("Invalid selection");
+            System.out.print("\nDo you want to return to the main menu? (Y/N): ");
+            String cont = sc.nextLine().trim().toLowerCase();
+            if (!cont.equals("y")) running = false;
         }
 
-        System.out.print("\nDo you want to return to the main menu? (Y/N): ");
-        String cont = sc.nextLine().trim().toLowerCase();
+        sc.close();
+    }
 
-        if (!cont.equals("y")) {
-            System.out.println("Exiting system... Goodbye!");
-            running = false;
+    private static void safeExecute(SQLRunnable task) {
+        synchronized (DB_LOCK) {
+            try (Connection conn = db.connectDB()) {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("PRAGMA journal_mode=WAL;");
+                    stmt.execute("PRAGMA busy_timeout=5000;");
+                }
+                conn.setAutoCommit(false);
+                task.run(conn);
+                conn.commit();
+            } catch (Exception e) {
+                System.out.println("⚠️ Database operation failed: " + e.getMessage());
+            }
         }
     }
 
-    sc.close();
-}
+    @FunctionalInterface
+    interface SQLRunnable {
+        void run(Connection conn) throws SQLException;
+    }
+
+    private static int readInt(Scanner sc) {
+        while (true) {
+            try {
+                int val = sc.nextInt();
+                sc.nextLine();
+                return val;
+            } catch (InputMismatchException e) {
+                System.out.println("Invalid input. Please enter a number.");
+                sc.nextLine();
+            }
+        }
+    }
+
+    private static String readString(Scanner sc, String prompt) {
+        String input;
+        while (true) {
+            System.out.print(prompt);
+            input = sc.nextLine();
+
+            if (input == null || input.trim().isEmpty()) {
+                System.out.println("❌ Input cannot be empty. Please try again.");
+            } else {
+                return input.trim(); 
+            }
+        }
+    }
+
     private static void signUp(Scanner sc) {
-    while (true) { // <-- Loop for repeated sign-ups
-        System.out.println("\n=== Sign Up ===");
-
-        System.out.print("Enter First Name: ");
-        String firstName = sc.nextLine();
-
-        System.out.print("Enter Last Name: ");
-        String lastName = sc.nextLine();
-
-        System.out.print("Enter Age: ");
-        int age = sc.nextInt();
-        sc.nextLine(); 
-
-        System.out.print("Enter Contact No: ");
-        String contactNo = sc.nextLine();
-
-        // ====== Email Validation ======
-        String email;
         while (true) {
-            System.out.print("Enter Gmail: ");
-            email = sc.nextLine();
+            System.out.println("\n=== Sign Up ===");
+            
+            String firstName = readString(sc, "Enter First Name: ");
+            String lastName = readString(sc, "Enter Last Name: ");
+            System.out.print("Enter Age: ");
+            int age = readInt(sc);
+            String contactNo = readString(sc, "Enter Contact No: ");
 
-            String checkEmailSQL = "SELECT * FROM Employee WHERE Mail = ?";
-            java.util.List<java.util.Map<String, Object>> emailResult = db.fetchRecords(checkEmailSQL, email);
+            final String[] gmail = new String[1];
+            final String[] username = new String[1];
 
-            if (emailResult.isEmpty()) {
-                break;
-            } else {
-                System.out.println("❌ Email already exists! Please try another Gmail.");
+            while (true) {
+                gmail[0] = readString(sc, "Enter Gmail: ");
+                List<Map<String, Object>> res = db.fetchRecords("SELECT * FROM Employee WHERE Mail=?", gmail[0]);
+                if (res == null || res.isEmpty()) break;
+                System.out.println("❌ Email already exists!");
             }
-        }
 
-        System.out.print("Enter Address: ");
-        String address = sc.nextLine();
+            String address = readString(sc, "Enter Address: ");
 
-        // ====== Username Validation ======
-        String username;
-        while (true) {
-            System.out.print("Enter Username: ");
-            username = sc.nextLine();
-
-            String checkUserSQL = "SELECT * FROM Employee WHERE User = ?";
-            java.util.List<java.util.Map<String, Object>> userResult = db.fetchRecords(checkUserSQL, username);
-
-            if (userResult.isEmpty()) {
-                break;
-            } else {
-                System.out.println("❌ Username already exists! Please try another username.");
+            while (true) {
+                username[0] = readString(sc, "Enter Username: ");
+                List<Map<String, Object>> res = db.fetchRecords("SELECT * FROM Employee WHERE \"User\"=?", username[0]);
+                if (res == null || res.isEmpty()) break;
+                System.out.println("❌ Username already exists!");
             }
+
+            String password = readString(sc, "Enter Password: ");
+            String hashedPassword = Config.hashPassword(password); 
+
+            String insertSQL = "INSERT INTO Employee " +
+                    "(F_name, L_name, Age, Num, Mail, Address, \"User\", Password, Appr, Stat, Position) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+            safeExecute(conn -> {
+                try (PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
+                    pstmt.setString(1, firstName);
+                    pstmt.setString(2, lastName);
+                    pstmt.setInt(3, age);
+                    pstmt.setString(4, contactNo);
+                    pstmt.setString(5, gmail[0]);
+                    pstmt.setString(6, address);
+                    pstmt.setString(7, username[0]);
+                    pstmt.setString(8, hashedPassword); 
+                    pstmt.setString(9, "Pending");
+                    pstmt.setString(10, "Active");
+                    pstmt.setString(11, "Employee");
+                    pstmt.executeUpdate();
+                }
+            });
+
+            System.out.println("✅ User registered successfully!");
+            System.out.print("\nDo you want to register another user? (Y/N): ");
+            if (!sc.nextLine().equalsIgnoreCase("Y")) return;
         }
-
-        System.out.print("Enter Password: ");
-        String password = sc.nextLine();
-
-        // ====== Insert New Employee ======
-        String insertSQL = "INSERT INTO Employee (F_name, L_name, Age, Num, Mail, Address, User, Password, Appr, Stat) " +
-                           "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        db.addRecord(insertSQL, firstName, lastName, age, contactNo, email, address, username, password, "Pending", "Active");
-
-        System.out.println("\n✅ User registered successfully!");
-        System.out.println("Username: " + username);
-        System.out.println("Email: " + email);
-
-        // ====== Verification Check ======
-        System.out.println("\nAttempting to verify registration...");
-        String sql = "SELECT * FROM Employee WHERE Mail = ? AND Password = ?";
-        java.util.List<java.util.Map<String, Object>> loginResult = db.fetchRecords(sql, email, password);
-
-        if (!loginResult.isEmpty()) {
-            java.util.Map<String, Object> user = loginResult.get(0);
-            System.out.println("Login successful!");
-            System.out.println("Status: " + user.get("Stat"));
-            System.out.println("Approval: " + user.get("Appr"));
-        } else {
-            System.out.println("Verification failed. Please check your credentials.");
-        }
-
-        // ====== Ask to Continue ======
-        System.out.print("\nDo you want to register another user? (Y/N): ");
-        String cont = sc.nextLine();
-
-        if (!cont.equalsIgnoreCase("Y")) {
-            System.out.println("Returning to main menu...");
-            return; // Go back to main()
-        }
-    }
-}
-
-    private static void addAdmin(Scanner sc) {
-    System.out.print("Add Username: ");
-    String user = sc.nextLine();  
-    System.out.print("Add Password: ");
-    String pass = sc.nextLine();
-
-    String sql = "INSERT INTO Admins (A_user, A_pass) VALUES (?, ?)";
-    db.addRecord(sql, user, pass);
-
-    System.out.println("Admin added successfully!");
-}
-  
-    private static void addTask(Scanner sc) {
-        System.out.print("Enter task ID: ");
-        int taskId = sc.nextInt();
-        sc.nextLine();
-        System.out.print("Enter task name: ");
-        String taskName = sc.nextLine();
-        String sql = "INSERT INTO Task (Task_ID, Task) VALUES (?, ?)";
-        db.addRecord(sql, taskId, taskName);
-        System.out.println("Task added successfully!");
     }
 
     private static void login(Scanner sc) {
-    System.out.println("=== Login ===");
-    System.out.print("Enter Username: ");
-    String loginUsername = sc.nextLine();
-    System.out.print("Enter Password: ");
-    String loginPassword = sc.nextLine();
+        System.out.println("=== Login ===");
+        
+        String loginUsername = readString(sc, "Enter Username: ");
+        String loginPassword = readString(sc, "Enter Password: ");
 
-    // ---------------- Super Admin Login ----------------
-    if (loginUsername.equals("123") && loginPassword.equals("123")) {
-        System.out.println("Super Admin login successful. Welcome, System Developer!");
-        System.out.println("-------------------------------------------");
+        if (loginUsername.equals(adminUsername) && loginPassword.equals(adminPassword)) {
+            superAdminMenu(sc);
+            return;
+        }
 
+        String hashedPassword = Config.hashPassword(loginPassword); 
+
+        safeExecute(conn -> {
+            String sql = "SELECT * FROM Employee WHERE \"User\"=? AND Password=?";
+            
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setString(1, loginUsername);
+                pstmt.setString(2, hashedPassword); 
+                
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        String position = rs.getString("Position");
+                        String firstName = rs.getString("F_name");
+                        String approvalStatus = rs.getString("Appr"); 
+
+                        if ("Pending".equalsIgnoreCase(approvalStatus)) {
+                            System.out.println("❌ Login failed. Your account approval is still 'Pending'.");
+                            System.out.println("  Please wait for an Admin to approve your registration.");
+                        } 
+                        else {
+                            System.out.println("\nLogin successful! Welcome, " + firstName + "!");
+                            String[] usernameHolder = new String[]{loginUsername};
+
+                            if (position.equalsIgnoreCase("Admin")) {
+                                adminMenu(sc, usernameHolder);
+                            } else if (position.equalsIgnoreCase("Employee")) {
+                                employeeMenu(sc, usernameHolder);
+                            } else {
+                                System.out.println("❌ Unknown position: " + position);
+                            }
+                        }
+                    } else {
+                        System.out.println("❌ Invalid username or password.");
+                    }
+                }
+            }
+        });
+    }
+
+    private static void superAdminMenu(Scanner sc) {
+        System.out.println("Super Admin login successful!");
         while (true) {
             System.out.println("\n=== Super Admin Menu ===");
-            System.out.println("1. Add Admin User");
-            System.out.println("2. View Admin Accounts");
-            System.out.println("3. Logout");
+            System.out.println("1. Add First Admin");
+            System.out.println("2. Logout");
             System.out.print("Response: ");
-            int option = sc.nextInt();
-            sc.nextLine();
-
+            int option = readInt(sc);
             switch (option) {
-                case 1:
-                    addAdmin(sc);
-                    break;
-                case 2:
-                    viewAdminAcc();
-                    break;
-                case 3:
-                    System.out.println("Logging out Super Admin...");
-                    return;
-                default:
-                    System.out.println("Invalid selection.");
+                case 1: addFirstAdmin(sc); break;
+                case 2: return;
+                default: System.out.println("Invalid selection.");
             }
-
-            // Ask if they want to continue
-            System.out.print("\nDo you want to continue as Super Admin? (Y/N): ");
-            String cont = sc.nextLine();
-            if (!cont.equalsIgnoreCase("Y")) {
-                System.out.println("Returning to main menu...");
-                return; // Go back to main()
-            }
+            System.out.print("Continue as Super Admin? (Y/N): ");
+            if (!sc.nextLine().equalsIgnoreCase("Y")) return;
         }
     }
 
-    // ---------------- Admin Login ----------------
-    String sqlAdminLogin = "SELECT * FROM Admins WHERE A_user = ? AND A_pass = ?";
-    java.util.List<java.util.Map<String, Object>> adminList = db.fetchRecords(sqlAdminLogin, loginUsername, loginPassword);
-
-    if (!adminList.isEmpty()) {
-        System.out.println("Admin login successful. Welcome, " + loginUsername + "!");
-        System.out.println("-------------------------------------------");
-
+    private static void adminMenu(Scanner sc, String[] usernameHolder) {
         while (true) {
             System.out.println("\n=== Admin Menu ===");
             System.out.println("1. View Employees");
-            System.out.println("2. Approve accounts");
-            System.out.println("3. Archive employee account");
-            System.out.println("4. Task management");
-            System.out.println("5. Assign task");
-            System.out.println("6. View assignment");
-            System.out.println("7. Change your credentials");
-            System.out.println("8. Add another Admin");
+            System.out.println("2. Approve Accounts");
+            System.out.println("3. Archive Employee Account");
+            System.out.println("4. Task Management");
+            System.out.println("5. Assign Task");
+            System.out.println("6. View Assignment");
+            System.out.println("7. Change Your Credentials");
+            System.out.println("8. Promote New Admin");
             System.out.println("9. Logout");
             System.out.print("Response: ");
-            int adminOption = sc.nextInt();
-            sc.nextLine();
+            int option = readInt(sc); 
 
-            switch (adminOption) {
-                case 1:
-                    viewEmployee();
-                    break;
-                case 2:
-                    ApproveAccount(sc);
-                    break;
-                case 3:
-                    // Archive code here
-                    break;
-                case 4:
-                    taskManagement(sc);
-                    break;
-                case 5:
-                    assignTask(sc);
-                    break;
-                case 6:
-                    viewAssignment();
-                    break;
-                case 7:
-                    changeAdminCredentials(sc);
-                    break;
-                case 8:
-                    addAdmin(sc);
-                    break;
-                case 9:
-                    System.out.println("Returning to main menu...");
-                    return; // Go back to main()
-                default:
-                    System.out.println("Invalid selection");
+            switch(option) {
+                case 1: viewEmployee(); break;
+                case 2: approveAccount(sc); break;
+                case 3: archiveEmployeeAccount(sc); break;
+                case 4: taskManagement(sc); break;
+                case 5: viewTasks(); assignTask(sc); break;
+                case 6: viewAssignment(); break;
+                case 7: changeCredentials(sc, usernameHolder); break;
+                case 8: promoteAdmin(sc); break;
+                case 9: return;
+                default: System.out.println("Invalid selection.");
             }
 
-            // Ask if they want to continue
-            System.out.print("\nDo you want to continue as Admin? (Y/N): ");
-            String cont = sc.nextLine();
-            if (!cont.equalsIgnoreCase("Y")) {
-                System.out.println("Returning to main menu...");
-                return;
-            }
+            System.out.print("Continue as Admin? (Y/N): ");
+            if(!sc.nextLine().equalsIgnoreCase("Y")) return;
         }
     }
 
-    // ---------------- Employee Login ----------------
-    try (Connection conn = db.connectDB()) {
-        String sql = "SELECT * FROM Employee WHERE User = ? AND Password = ?";
-        PreparedStatement pstmt = conn.prepareStatement(sql);
-        pstmt.setString(1, loginUsername);
-        pstmt.setString(2, loginPassword);
-        ResultSet rs = pstmt.executeQuery();
+    private static void employeeMenu(Scanner sc, String[] usernameHolder) {
+        while (true) {
+            System.out.println("\n=== Employee Menu ===");
+            System.out.println("1. View Your Tasks");
+            System.out.println("2. Update Task Status");
+            System.out.println("3. Change Your Credentials");
+            System.out.println("4. Logout");
+            System.out.print("Response: ");
+            int option = readInt(sc); 
 
-        if (rs.next()) {
-            System.out.println("Login successful. Welcome, " + rs.getString("F_name") + "!");
-            String username = rs.getString("User");
+            switch(option) {
+                case 1: viewYourTask(usernameHolder[0]); break;
+                case 2: updateTaskStatus(sc, usernameHolder[0]); break;
+                case 3: changeCredentials(sc, usernameHolder); break;
+                case 4: return;
+                default: System.out.println("Invalid selection.");
+            }
 
-            while (true) {
-                System.out.println("\n=== Employee Menu ===");
-                System.out.println("1. View your tasks");
-                System.out.println("2. Update your task status");
-                System.out.println("3. Change your credentials");
-                System.out.println("4. Logout");
-                System.out.print("Response: ");
-                int userOption = sc.nextInt();
-                sc.nextLine();
+            System.out.print("Continue as Employee? (Y/N): ");
+            if(!sc.nextLine().equalsIgnoreCase("Y")) return;
+        }
+    }
 
-                switch (userOption) {
-                    case 1:
-                        viewYourTask(username);
-                        break;
-                    case 2:
-                        updateTaskStatus(sc, username);
-                        break;
-                    case 3:
-                        changeCredentials(sc, username);
-                        break;
-                    case 4:
-                        System.out.println("Logging out...");
-                        return; // back to main
-                    default:
-                        System.out.println("Invalid selection");
-                }
-
-                // Ask if they want to continue
-                System.out.print("\nDo you want to continue as Employee? (Y/N): ");
-                String cont = sc.nextLine();
-                if (!cont.equalsIgnoreCase("Y")) {
-                    System.out.println("Returning to main menu...");
-                    return;
+    private static void addFirstAdmin(Scanner sc) {
+        safeExecute(conn -> {
+            String checkSQL = "SELECT COUNT(*) AS count FROM Employee WHERE Position='Admin'";
+            try (PreparedStatement pstmt = conn.prepareStatement(checkSQL);
+                 ResultSet rs = pstmt.executeQuery()) {
+                if(rs.next() && rs.getInt("count") > 0) {
+                    System.out.println("❌ Admin already exists!"); return;
                 }
             }
-        } else {
-            System.out.println("Invalid username or password.");
-        }
 
-    } catch (Exception e) {
-        System.out.println("Error during login: " + e.getMessage());
+            String fName = readString(sc, "Enter First Name: ");
+            String lName = readString(sc, "Enter Last Name: ");
+            System.out.print("Enter Age: "); int age = readInt(sc);
+            String contact = readString(sc, "Enter Contact Number: ");
+            String email = readString(sc, "Enter Email: ");
+            String address = readString(sc, "Enter Address: ");
+            String username = readString(sc, "Enter Username: ");
+            String password = readString(sc, "Enter Password: ");
+            String hashedPassword = Config.hashPassword(password);
+
+            System.out.print("Confirm creation? (Y/N): ");
+            if(!sc.nextLine().equalsIgnoreCase("Y")) return;
+
+            String insertSQL = "INSERT INTO Employee (F_name,L_name,Age,Num,Mail,Address,User,Password,Position,Appr,Stat) " +
+                                     "VALUES (?,?,?,?,?,?,?,?,'Admin','Approved','Active')";
+            try (PreparedStatement pstmtInsert = conn.prepareStatement(insertSQL)) {
+                pstmtInsert.setString(1,fName);
+                pstmtInsert.setString(2,lName);
+                pstmtInsert.setInt(3,age);
+                pstmtInsert.setString(4,contact);
+                pstmtInsert.setString(5,email);
+                pstmtInsert.setString(6,address);
+                pstmtInsert.setString(7,username);
+                pstmtInsert.setString(8,hashedPassword); 
+                pstmtInsert.executeUpdate();
+                System.out.println("✅ First Admin added successfully!");
+            }
+        });
     }
-}
 
-    private static void ApproveAccount(Scanner sc) {
-    String empQuery = "SELECT * FROM Employee WHERE Appr != 'Approved'"; 
-    String[] empHeaders = {"ID", "First Name", "Last Name", "Approval"};
-    String[] empColumns = {"U_ID", "F_name", "L_name", "Appr"};
-    db.viewRecords(empQuery, empHeaders, empColumns);
-
-
-    System.out.print("Enter the Employee ID to approve: ");
-    int empId = sc.nextInt();
-    sc.nextLine(); 
-
-   
-    String updateSQL = "UPDATE Employee SET Appr = 'Approved' WHERE U_ID = ?";
-    try {
-        db.updateRecord(updateSQL, empId);
-        System.out.println("Employee ID " + empId + " approved successfully!");
-    } catch (Exception e) {
-        System.out.println("Error updating approval status: " + e.getMessage());
+    private static void approveAccount(Scanner sc) {
+        safeExecute(conn -> {
+            String sql = "SELECT U_ID,F_name,L_name,Appr FROM Employee WHERE Appr!='Approved'";
+            Set<Integer> pendingIds = new HashSet<>();
+            try (PreparedStatement pstmt = conn.prepareStatement(sql);
+                 ResultSet rs = pstmt.executeQuery()) {
+                System.out.printf("%-5s %-15s %-15s %-10s%n","ID","First Name","Last Name","Approval");
+                while(rs.next()){
+                    int id = rs.getInt("U_ID");
+                    pendingIds.add(id);
+                    System.out.printf("%-5d %-15s %-15s %-10s%n", id, rs.getString("F_name"), rs.getString("L_name"), rs.getString("Appr"));
+                }
+            }
+            System.out.print("Enter Employee ID to approve (0 to cancel): ");
+            int id = readInt(sc);
+            if(id==0 || !pendingIds.contains(id)) return;
+            String upd = "UPDATE Employee SET Appr='Approved' WHERE U_ID=?";
+            try(PreparedStatement pstmt = conn.prepareStatement(upd)){
+                pstmt.setInt(1,id); pstmt.executeUpdate(); System.out.println("✅ Employee ID "+id+" approved!");
+            }
+        });
     }
-}
-    private static void changeCredentials(Scanner sc, String username) {
-    boolean continueChanging = true;
 
-    try (Connection conn = db.connectDB()) { // one connection for the whole method
-        while (continueChanging) {
-            System.out.println("\n=== Change Your Credentials ===");
+    private static void changeCredentials(Scanner sc, String[] usernameHolder) {
+        boolean cont = true;
+
+        while (cont) {
+            System.out.println("\n=== Change Credentials ===");
             System.out.println("1. Change Username");
             System.out.println("2. Change Password");
-            System.out.println("3. Return to previous menu");
-            System.out.print("Select option: ");
-            int option = sc.nextInt();
-            sc.nextLine();  
+            System.out.println("3. Return");
+            System.out.print("Choose: ");
+            int opt = readInt(sc); 
 
-            switch (option) {
-                case 1:
-                    System.out.print("Enter new username: ");
-                    String newUsername = sc.nextLine();
+            switch (opt) {
+                case 1: {
+                    String pass = readString(sc, "Current password: ");
+                    String hashedPass = Config.hashPassword(pass); 
 
-                    // Check if username exists
-                    String checkUsernameSQL = "SELECT 1 FROM Employee WHERE User = ?";
-                    try (PreparedStatement pstmtCheck = conn.prepareStatement(checkUsernameSQL)) {
-                        pstmtCheck.setString(1, newUsername);
-                        try (ResultSet rs = pstmtCheck.executeQuery()) {
-                            if (rs.next()) {
-                                System.out.println("❌ Username already exists! Try another.");
-                                break;
-                            }
-                        }
+                    List<Map<String, Object>> checkPass =
+                            db.fetchRecords("SELECT * FROM Employee WHERE \"User\"=? AND Password=?", usernameHolder[0], hashedPass);
+                    
+                    if (checkPass == null || checkPass.isEmpty()) {
+                        System.out.println("❌ Incorrect password.");
+                        break;
                     }
 
-                    // Update username
-                    String updateUsernameSQL = "UPDATE Employee SET User = ? WHERE User = ?";
-                    try (PreparedStatement pstmtUpdate = conn.prepareStatement(updateUsernameSQL)) {
-                        pstmtUpdate.setString(1, newUsername);
-                        pstmtUpdate.setString(2, username);
-                        int updated = pstmtUpdate.executeUpdate();
-                        if (updated > 0) {
-                            System.out.println("✅ Username changed successfully!");
-                            username = newUsername; // update current username
-                        } else {
-                            System.out.println("⚠️ Username update failed. Try again.");
-                        }
+                    String newUser = readString(sc, "New username: ");
+
+                    List<Map<String, Object>> checkUser =
+                            db.fetchRecords("SELECT * FROM Employee WHERE \"User\"=?", newUser);
+                    if (checkUser != null && !checkUser.isEmpty()) {
+                        System.out.println("❌ Username already taken.");
+                        break;
                     }
+
+                    safeExecute(conn -> {
+                        try (PreparedStatement pstmt = conn.prepareStatement(
+                                "UPDATE Employee SET \"User\"=? WHERE \"User\"=?")) {
+                            pstmt.setString(1, newUser);
+                            pstmt.setString(2, usernameHolder[0]);
+                            pstmt.executeUpdate();
+                        }
+                    });
+
+                    System.out.println("✅ Username updated!");
+                    usernameHolder[0] = newUser; 
                     break;
+                }
 
                 case 2:
-                    System.out.print("Enter new password: ");
-                    String newPassword = sc.nextLine();
+                    String curr = readString(sc, "Current password: ");
+                    String hashedCurr = Config.hashPassword(curr);
 
-                    String updatePasswordSQL = "UPDATE Employee SET Password = ? WHERE User = ?";
-                    try (PreparedStatement pstmtUpdate = conn.prepareStatement(updatePasswordSQL)) {
-                        pstmtUpdate.setString(1, newPassword);
-                        pstmtUpdate.setString(2, username);
-                        int updated = pstmtUpdate.executeUpdate();
-                        if (updated > 0) {
-                            System.out.println("✅ Password changed successfully!");
-                        } else {
-                            System.out.println("⚠️ Password update failed. Try again.");
-                        }
+                    List<Map<String, Object>> checkPass2 =
+                            db.fetchRecords("SELECT * FROM Employee WHERE \"User\"=? AND Password=?", usernameHolder[0], hashedCurr);
+                    
+                    if (checkPass2 == null || checkPass2.isEmpty()) {
+                        System.out.println("❌ Incorrect password.");
+                        break;
                     }
+
+                    String np = readString(sc, "New password: ");
+                    String cp = readString(sc, "Confirm password: ");
+                    
+                    if (!np.equals(cp)) {
+                        System.out.println("❌ Password mismatch.");
+                        break;
+                    }
+
+                    String newHashedPassword = Config.hashPassword(np);
+
+                    safeExecute(conn -> {
+                        try (PreparedStatement pstmt = conn.prepareStatement(
+                                "UPDATE Employee SET Password=? WHERE \"User\"=?")) {
+                            pstmt.setString(1, newHashedPassword); 
+                            pstmt.setString(2, usernameHolder[0]);
+                            pstmt.executeUpdate();
+                        }
+                    });
+
+                    System.out.println("✅ Password updated!");
                     break;
 
                 case 3:
-                    continueChanging = false;
+                    cont = false;
                     break;
 
                 default:
-                    System.out.println("Invalid selection.");
+                    System.out.println("Invalid option.");
+                    break;
             }
 
-            if (continueChanging) {
-                System.out.print("\nDo you want to continue changing credentials? (yes/no): ");
-                String cont = sc.nextLine().trim().toLowerCase();
-                if (!cont.equals("yes")) {
-                    continueChanging = false;
+            if (cont) {
+                System.out.print("Continue? (yes/no): ");
+                if (!sc.nextLine().equalsIgnoreCase("yes")) cont = false;
+            }
+        }
+    }
+    
+    private static void viewEmployee() {
+        String sql = "SELECT U_ID, F_name, L_name, Mail, Stat, Position FROM Employee WHERE Appr='Approved'";
+
+        safeExecute(conn -> {
+            try (PreparedStatement pstmt = conn.prepareStatement(sql);
+                 ResultSet rs = pstmt.executeQuery()) {
+
+                System.out.println("\n--- Employee List ---");
+                
+                System.out.printf("%-5s %-15s %-15s %-25s %-10s %-10s%n",
+                        "ID", "First Name", "Last Name", "Email", "Status", "Position");
+                
+                System.out.println("-----------------------------------------------------------------------------------");
+
+                int count = 0;
+                while (rs.next()) {
+                    System.out.printf("%-5d %-15s %-15s %-25s %-10s %-10s%n",
+                            rs.getInt("U_ID"),
+                            rs.getString("F_name"),
+                            rs.getString("L_name"),
+                            rs.getString("Mail"),
+                            rs.getString("Stat"),
+                            rs.getString("Position"));
+                    count++;
+                }
+
+                System.out.println("-----------------------------------------------------------------------------------");
+                if (count == 0) {
+                    System.out.println("No approved employees found.");
+                } else {
+                    System.out.println("Total approved employees: " + count);
+                }
+
+            }
+        });
+    }
+
+    private static void archiveEmployeeAccount(Scanner sc){
+        viewEmployee();
+        System.out.print("Enter Employee ID to archive: "); int uid = readInt(sc);
+        String sql = "UPDATE Employee SET Stat='Archived' WHERE U_ID=?";
+        safeExecute(conn -> { try(PreparedStatement ps = conn.prepareStatement(sql)){ ps.setInt(1,uid); ps.executeUpdate(); System.out.println("✅ Archived"); } });
+    }
+
+    private static void promoteAdmin(Scanner sc){
+        viewEmployee();
+        System.out.print("Enter Employee ID to promote as Admin: "); int uid = readInt(sc);
+        String sql = "UPDATE Employee SET Position='Admin' WHERE U_ID=?";
+        safeExecute(conn -> { try(PreparedStatement ps = conn.prepareStatement(sql)){ ps.setInt(1,uid); ps.executeUpdate(); System.out.println("✅ Promoted"); } });
+    }
+
+    private static void taskManagement(Scanner sc){
+        while(true){
+            System.out.println("\n--- Task Management ---");
+            System.out.println("1. Add Task");
+            System.out.println("2. View Task");
+            System.out.println("3. Update Task");
+            System.out.println("4. Back to Admin Menu"); 
+            System.out.print("Input:");
+            int opt = readInt(sc);
+            
+            switch(opt){
+                case 1: addTask(sc); break;
+                case 2: viewTasks(); break;
+                case 3: viewTasks(); updateTask(sc); break;
+                case 4: return; 
+                default: System.out.println("Invalid"); break;
+            }
+            
+            System.out.print("Continue in Task Management? (Y/N): ");
+            if(!sc.nextLine().equalsIgnoreCase("Y")) {
+                return; 
+            }
+        }
+    }
+
+    private static void addTask(Scanner sc) {
+        String tname = readString(sc, "Enter Task name: ");
+        
+        String sql = "INSERT INTO Task(Task) VALUES(?)";
+        
+        safeExecute(conn -> {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, tname);
+                ps.executeUpdate();
+                System.out.println("Task added");
+            }
+        });
+    }
+
+    private static void updateTask(Scanner sc){
+        System.out.print("Task ID to update: "); int tid = readInt(sc);
+        String name = readString(sc, "New task name: ");
+        System.out.print("Confirm? (Y/N): "); if(!sc.nextLine().equalsIgnoreCase("Y")) return;
+        String sql = "UPDATE Task SET Task=? WHERE Task_ID=?";
+        safeExecute(conn -> { try(PreparedStatement ps = conn.prepareStatement(sql)){ ps.setString(1,name); ps.setInt(2,tid); int r = ps.executeUpdate(); if(r>0) System.out.println("✅ Updated"); else System.out.println("❌ Not found");} });
+    }
+
+    private static void viewTasks(){
+        String sql="SELECT * FROM Task";
+        db.viewRecords(sql,new String[]{"Task ID","Task"}, new String[]{"Task_ID","Task"});
+    }
+
+    private static void assignTask(Scanner sc){
+        System.out.print("Task ID: "); int tid = readInt(sc);
+        viewEmployee();
+        System.out.print("Employee ID: "); int uid = readInt(sc);
+        
+        String sql="INSERT INTO Assignment(U_ID, Task_ID, Status) VALUES(?, ?, ?)";
+        
+        safeExecute(conn -> {
+            try(PreparedStatement ps = conn.prepareStatement(sql)){
+                ps.setInt(1, uid);    
+                ps.setInt(2, tid);    
+                ps.setString(3, "Assigned"); 
+                ps.executeUpdate();
+                System.out.println("✅ Task Assigned");
+            }
+        });
+    }
+
+    private static void viewAssignment(){
+        String sql="SELECT a.Ass_ID, e.L_name, t.Task, a.Status " + 
+                   "FROM Assignment a " +
+                   "JOIN Employee e ON a.U_ID=e.U_ID " + 
+                   "JOIN Task t ON a.Task_ID=t.Task_ID";
+        
+        safeExecute(conn -> {
+            try(PreparedStatement ps = conn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                
+                System.out.printf("%-15s %-25s %-30s %-15s%n", "Assignment ID", "Employee Last Name", "Task Name", "Status");
+                
+                while(rs.next()){
+                    System.out.printf("%-15d %-25s %-30s %-15s%n",
+                        rs.getInt("Ass_ID"),
+                        rs.getString("L_name"),
+                        rs.getString("Task"),
+                        rs.getString("Status") 
+                    );
                 }
             }
-        }
-
-    } catch (SQLException e) {
-        System.out.println("⚠️ Database error: " + e.getMessage());
-    }
-}
-
-    private static void taskManagement(Scanner sc) {
-        System.out.println("1. Add Task");
-        System.out.println("2. View Tasks");
-        System.out.println("3. Delete Task");
-        System.out.println("4. Update Task");
-        System.out.print("Choice: ");
-        int choice = sc.nextInt();
-        sc.nextLine();
-
-        switch (choice) {
-            case 1:
-                addTask(sc);
-                break;
-            case 2:
-                viewTasks();
-                break;
-            case 3:
-                deleteTask(sc);
-                break;
-            case 4:
-                
-                break;
-            default:
-                System.out.println("Invalid choice");
-        }
+        });
     }
 
-    private static void assignTask(Scanner sc) {
-        System.out.println("=== Assign Task ===");
-        System.out.println("Available Tasks:");
-        String taskQuery = "SELECT Task_ID, Task FROM Task";
-        String[] taskHeaders = {"Task ID", "Task"};
-        String[] taskColumns = {"Task_ID", "Task"};
-        db.viewRecords(taskQuery, taskHeaders, taskColumns);
-        System.out.print("Enter the Task ID to assign: ");
-        int taskId = sc.nextInt();
-        sc.nextLine();
-        System.out.println("Available Employees:");
-        String empQuery = "SELECT U_ID, F_name, L_name FROM Employee";
-        String[] empHeaders = {"Employee ID", "First Name", "Last Name"};
-        String[] empColumns = {"U_ID", "F_name", "L_name"};
-        db.viewRecords(empQuery, empHeaders, empColumns);
-        System.out.print("Enter the Employee ID to assign to: ");
-        int employeeId = sc.nextInt();
-        sc.nextLine();
-
-        if (taskId <= 0 || employeeId <= 0) {
-            System.out.println("Invalid Task or Employee ID. Please try again.");
-            return;
-        }
-
-        String sqlAssign = "INSERT INTO Assignment (U_ID, Task_ID) VALUES (?, ?)";
-        try {
-            db.updateRecord(sqlAssign, taskId, employeeId);
-            System.out.println("Task successfully assigned to Employee ID " + employeeId + "!");
-        } catch (Exception e) {
-            System.out.println("Error during task assignment: " + e.getMessage());
-        }
-        viewAssignment();
-    }
-
-    private static void viewYourTask(String username) {
-    String query = "SELECT a.Ass_ID, t.Task_ID, t.Task " +
+    private static void viewYourTask(String username){
+        String sql="SELECT a.Ass_ID, t.Task_ID, t.Task, a.Status " +
                    "FROM Assignment a " +
-                   "JOIN Employee e ON a.U_ID = e.U_ID " +
-                   "JOIN Task t ON a.Task_ID = t.Task_ID " +
-                   "WHERE e.User = ?";
-
-    try (Connection conn = db.connectDB();
-         PreparedStatement pstmt = conn.prepareStatement(query)) {
-        pstmt.setString(1, username);
-        ResultSet rs = pstmt.executeQuery();
-
-        System.out.println("\n=== Your Assigned Tasks ===");
-        System.out.printf("%-15s %-10s %-20s%n", "Assignment ID", "Task ID", "Task Name");
-        System.out.println("-----------------------------------------------------");
-
-        boolean hasTasks = false;
-        while (rs.next()) {
-            hasTasks = true;
-            System.out.printf("%-15d %-10d %-20s%n",
-                    rs.getInt("Ass_ID"),
-                    rs.getInt("Task_ID"),
-                    rs.getString("Task"));
-        }
-
-        if (!hasTasks) {
-            System.out.println("No tasks assigned to you yet.");
-        }
-
-    } catch (Exception e) {
-        System.out.println("Error viewing your tasks: " + e.getMessage());
+                   "JOIN Employee e ON a.U_ID=e.U_ID " +
+                   "JOIN Task t ON a.Task_ID=t.Task_ID " +
+                   "WHERE e.User=?";
+        
+        safeExecute(conn -> {
+            try(PreparedStatement ps = conn.prepareStatement(sql)){ 
+                ps.setString(1,username);
+                try(ResultSet rs = ps.executeQuery()){
+                    
+                    System.out.printf("%-15s %-10s %-20s %-15s%n", "Assignment ID", "Task ID", "Task Name", "Status");
+                    
+                    while(rs.next()){
+                        System.out.printf("%-15d %-10d %-20s %-15s%n",
+                            rs.getInt("Ass_ID"),
+                            rs.getInt("Task_ID"),
+                            rs.getString("Task"),
+                            rs.getString("Status") 
+                        );
+                    }
+                }
+            }
+        });
     }
-}
-   private static void updateTaskStatus(Scanner sc, String username) {
-    String query = "SELECT a.Ass_ID, t.Task_ID, t.Task, a.Status " +
-                   "FROM Assignment a " +
-                   "JOIN Employee e ON a.U_ID = e.U_ID " +
-                   "JOIN Task t ON a.Task_ID = t.Task_ID " +
-                   "WHERE e.User = ?";
-
-    try (Connection conn = db.connectDB();
-         PreparedStatement pstmt = conn.prepareStatement(query)) {
-        pstmt.setString(1, username);
-        ResultSet rs = pstmt.executeQuery();
-
-        System.out.println("\n=== Your Assigned Tasks ===");
-        System.out.printf("%-15s %-10s %-20s %-15s%n", "Assignment ID", "Task ID", "Task Name", "Status");
-        System.out.println("---------------------------------------------------------------");
-
-        boolean hasTasks = false;
-        while (rs.next()) {
-            hasTasks = true;
-            System.out.printf("%-15d %-10d %-20s %-15s%n",
-                    rs.getInt("Ass_ID"),
-                    rs.getInt("Task_ID"),
-                    rs.getString("Task"),
-                    rs.getString("Status"));
-        }
-
-        if (!hasTasks) {
-            System.out.println("No tasks assigned to you yet.");
-            return;
-        }
-
-        System.out.print("\nEnter the Assignment ID of the task you want to update: ");
-        int assignmentId = sc.nextInt();
-        sc.nextLine();  
-
-        System.out.print("Enter new status for this task (e.g., 'In Progress', 'Completed'): ");
-        String newStatus = sc.nextLine();
-
-        String updateStatusSQL = "UPDATE Assignment SET Status = ? WHERE Ass_ID = ?";
-        try {
-            db.updateRecord(updateStatusSQL, newStatus, assignmentId);
-            System.out.println("✅ Task status updated successfully!");
-        } catch (Exception e) {
-            System.out.println("Error updating task status: " + e.getMessage());
-        }
-
-    } catch (Exception e) {
-        System.out.println("Error retrieving tasks: " + e.getMessage());
+    
+    private static void updateTaskStatus(Scanner sc,String username){
+        viewYourTask(username);
+        System.out.print("Enter Assignment ID to update status: "); int aid = readInt(sc);
+        String status = readString(sc, "Enter new status: ");
+        String sql="UPDATE Assignment SET Status=? WHERE Ass_ID=?";
+        safeExecute(conn -> { try(PreparedStatement ps = conn.prepareStatement(sql)){ ps.setString(1,status); ps.setInt(2,aid); ps.executeUpdate(); System.out.println("✅ Status Updated"); } });
     }
-}
-
-
-    private static void viewTasks() {
-        String taskQuery = "SELECT * FROM Task";
-        String[] taskHeaders = {"Task ID", "Task"};
-        String[] taskColumns = {"Task_ID", "Task"};
-        db.viewRecords(taskQuery, taskHeaders, taskColumns);
-    }
-
-    private static void viewAssignment() {
-    String assignmentQuery =
-        "SELECT a.Ass_ID, e.L_name, t.Task " +
-        "FROM Assignment a " +
-        "JOIN Employee e ON a.U_ID = e.U_ID " +
-        "JOIN Task t ON a.Task_ID = t.Task_ID";
-
-    try (Connection conn = db.connectDB();
-         PreparedStatement pstmt = conn.prepareStatement(assignmentQuery);
-         ResultSet rs = pstmt.executeQuery()) {
-
-        System.out.println("\n=== Assignments ===");
-        System.out.printf("%-15s %-25s %-30s%n", "Assignment ID", "Employee Last Name", "Task Name");
-        System.out.println("---------------------------------------------------------------------");
-
-        boolean hasResults = false;
-        while (rs.next()) {
-            hasResults = true;
-            System.out.printf("%-15d %-25s %-30s%n",
-                    rs.getInt("Ass_ID"),
-                    rs.getString("L_name"),
-                    rs.getString("Task"));
-        }
-
-        if (!hasResults) {
-            System.out.println("No assignments found.");
-        }
-
-    } catch (Exception e) {
-        System.out.println("Error viewing assignments: " + e.getMessage());
-    }
-}
-
-
-
-
-    private static void viewAdminAcc() {
-        String taskQuery = "SELECT * FROM Admins";
-        String[] taskHeaders = {"Admin ID", "Username", "Password"};
-        String[] taskColumns = {"Admin_ID", "A_user", "A_pass"};
-        db.viewRecords(taskQuery, taskHeaders, taskColumns);
-    }
-
-    private static void deleteTask(Scanner sc) {
-        System.out.print("Enter Task ID to delete: ");
-        int taskIdToDelete = sc.nextInt();
-        String sqlDelete = "DELETE FROM Task WHERE Task_ID = ?";
-        db.deleteRecord(sqlDelete, taskIdToDelete);
-        System.out.println("Task deleted successfully!");
-    }
-
-    private static void viewEmployee() {
-    String empQuery = "SELECT * FROM Employee WHERE Appr = 'Approved'";
-    String[] empHeaders = {"ID", "First Name", "Last Name", "Status"};
-    String[] empColumns = {"U_ID", "F_name", "L_name", "Stat"};
-    db.viewRecords(empQuery, empHeaders, empColumns);
-}
-
-
-    private static void changeAdminCredentials(Scanner sc) {
-        System.out.print("Enter new admin username: ");
-        adminUsername = sc.nextLine();
-        System.out.print("Enter new admin password: ");
-        adminPassword = sc.nextLine();
-        System.out.println("Admin credentials updated successfully!");
-    }
-
 }
